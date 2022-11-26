@@ -1,3 +1,9 @@
+## adb_element
+
+简单封装 uiautomator, 便于 adb 使用
+
+
+
 ## copy_in_cmd
 
 将命令输出写到剪贴板，支持管道符。默认复制当前文件路径。
