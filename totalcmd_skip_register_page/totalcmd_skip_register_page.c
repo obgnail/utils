@@ -1,5 +1,4 @@
 #include "windows.h"
-#include <stdio.h>
 
 
 BOOL CALLBACK EnumChildProc(HWND hwnd, LPARAM lParam) {
@@ -25,7 +24,7 @@ int main(void) {
     int sleep_time = 1000;
     char num;
 
-    popen(totalcmd_path, "r");
+    WinExec(totalcmd_path, SW_HIDE);
     Sleep(sleep_time);
 
     HWND hwnd = FindWindow(TEXT(totalcmd_class_name), NULL);
