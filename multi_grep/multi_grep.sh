@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# usage: mutli_grep.sh ./ selenium cookie
 if [ $# -le 1 ]; 
 then
     echo "argument -le 1"
