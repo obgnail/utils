@@ -16,6 +16,12 @@
 
 
 
+## multi_grep
+
+快速构建出 `grep -nirl "selenium" "./" | xargs -d '\n' grep -Hnil "cookie"` 语句，搜索包含多个关键字的文件
+
+
+
 ## graphql_parser
 
 解析 graphQL，提高可读性
