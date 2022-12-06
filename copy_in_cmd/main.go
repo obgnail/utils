@@ -111,5 +111,6 @@ func main() {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println("copied")
+	// 在数据写入剪切板后还是将其返回,方便后续串联管道
+	fmt.Println(data)
 }
