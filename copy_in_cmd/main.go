@@ -98,16 +98,15 @@ func GbkToUtf8(s []byte) ([]byte, error) {
 
 func toWslPath(p string) string {
 	p = strings.Replace(p, "\\", "/", -1)
-	tempList := strings.Split(p, ":")
+	tempList := strings.SplitN(p, ":", 2)
 	res := fmt.Sprintf("/mnt/%s%s", strings.ToLower(tempList[0]), tempList[1])
 	return res
 }
 
-var wsl bool
-
 func main() {
 	var err error
 	var data string
+	var wsl bool
 	flag.BoolVar(&wsl, "wsl", false, "to wsl path")
 	flag.Parse()
 
