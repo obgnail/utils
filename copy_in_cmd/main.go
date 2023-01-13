@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"flag"
 	"fmt"
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"golang.org/x/text/transform"
@@ -95,9 +96,21 @@ func GbkToUtf8(s []byte) ([]byte, error) {
 	return d, nil
 }
 
+func toWslPath(p string) string {
+	p = strings.Replace(p, "\\", "/", -1)
+	tempList := strings.Split(p, ":")
+	res := fmt.Sprintf("/mnt/%s%s", strings.ToLower(tempList[0]), tempList[1])
+	return res
+}
+
+var wsl bool
+
 func main() {
 	var err error
 	var data string
+	flag.BoolVar(&wsl, "wsl", false, "to wsl path")
+	flag.Parse()
+
 	dataBytes, ok := HasStdin()
 	data = CleanBytes(dataBytes)
 	if !ok {
@@ -106,7 +119,11 @@ func main() {
 			fmt.Println(err)
 			return
 		}
+		if wsl {
+			data = toWslPath(data)
+		}
 	}
+
 	if err = WriteAll(data); err != nil {
 		fmt.Println(err)
 		return
