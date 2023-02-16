@@ -32,3 +32,11 @@
 
 进度条
 
+
+## dockergo
+
+使用如下命令快速构建出 `docker run --rm --name golang -e GO111MODULE=auto -v /d/golang:/go golang:1.18 /bin/bash -c "cd /go/src/github.com/obgnail/tmp/go_test/temp_test && go run ../main.go"`
+```bash
+D:\golang\src\github.com\obgnail\tmp\go_test\temp_test
+$ dockergo run ..\main.go
+```
