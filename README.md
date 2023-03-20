@@ -40,3 +40,14 @@
 D:\golang\src\github.com\obgnail\tmp\go_test\temp_test
 $ dockergo run ..\main.go
 ```
+
+
+## my go get
+
+go get 本质就是循环调用git clone -- https://github.com/tidwall/buntdb D:\golang\src\github.com\tidwall\buntdb 的过程。然而在国内总是失效，将https换成ssh就可以。
+此工具快速构建git clone -- git@github.com:tidwall/buntdb.git D:\golang\src\github.com\tidwall\buntdb
+```bash
+$ mygo get github.com/tidwall/buntdb
+git clone -- git@github.com:tidwall/buntdb.git D:\golang\src\github.com\tidwall\buntdb
+Cloning into 'D:\golang\src\github.com\tidwall\buntdb'...
+```
