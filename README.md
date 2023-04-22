@@ -51,3 +51,13 @@ $ mygo get github.com/tidwall/buntdb
 git clone -- git@github.com:tidwall/buntdb.git D:\golang\src\github.com\tidwall\buntdb
 Cloning into 'D:\golang\src\github.com\tidwall\buntdb'...
 ```
+
+## voiceLinks
+
+fork 自 GreasyFork，添加了一些功能，个人使用的 DLsite 的油猴脚本：
+
+- mouseover：预览
+- mouseout：取消预览
+- click：跳转到 DLsite
+- dbclick：跳转到下载站点
+
