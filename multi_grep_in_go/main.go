@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"flag"
 	"fmt"
 	"io/fs"
 	"io/ioutil"
@@ -18,12 +19,6 @@ import (
 func checkError(err error) {
 	if err != nil {
 		panic(err)
-	}
-}
-
-func toLower(keywords []string) {
-	for idx, value := range keywords {
-		keywords[idx] = strings.ToLower(value)
 	}
 }
 
@@ -53,13 +48,16 @@ func _filter(wg *sync.WaitGroup, syncChan chan struct{}, targetChan chan string,
 
 	content, err := ioutil.ReadFile(filePath)
 	checkError(err)
-	content = bytes.ToLower(content)
+	if !argCaseSensitive {
+		content = bytes.ToLower(content)
+	}
 
 	for _, ele := range keywords {
 		if !bytes.Contains(content, []byte(ele)) {
 			return
 		}
 	}
+	found = append(found, filePath)
 	targetChan <- filePath
 }
 
@@ -74,11 +72,10 @@ func filter(fileChan chan string, syncChan chan struct{}, targetChan chan string
 	close(targetChan)
 }
 
-func printResult(targetChan chan string, toSearch *[]string, endChan chan struct{}) {
+func printResult(targetChan chan string, endChan chan struct{}) {
 	idx := 0
 	for ele := range targetChan {
 		fmt.Printf("%3s  %s\n", strconv.Itoa(idx), ele)
-		*toSearch = append(*toSearch, ele)
 		idx++
 	}
 	endChan <- struct{}{}
@@ -117,56 +114,82 @@ func getIndexes() []int {
 	return indexList
 }
 
-func getFiles(toSearch []string, indexes []int) []string {
+func getFiles(indexes []int) []string {
 	if len(indexes) == 0 {
-		return toSearch
+		return found
 	}
 
 	var files []string
 	for _, idx := range indexes {
-		if idx > len(toSearch)-1 || idx < 0 {
+		if idx > len(found)-1 || idx < 0 {
 			continue
 		}
-		files = append(files, toSearch[idx])
+		files = append(files, found[idx])
 	}
 
 	return files
 }
 
-func openInVSCode(files []string) {
+func openFile(editor string, files []string) {
 	if len(files) == 0 {
 		fmt.Println("error: len(files)==0")
 		return
 	}
 
-	err := execWinShell("code", files...)
+	err := execWinShell(editor, files...)
 	checkError(err)
 }
 
+const (
+	defaultDirPath = "D:\\myshare\\Dropbox\\root\\md"
+	defaultEditor  = "code"
+)
+
+var (
+	argDirPath       string
+	argEditor        string
+	argCaseSensitive bool
+	argKeywords      []string
+
+	found []string
+)
+
+func parseArg() {
+	flag.StringVar(&argDirPath, "p", defaultDirPath, "search dir")
+	flag.StringVar(&argEditor, "e", defaultEditor, "editor")
+	flag.BoolVar(&argCaseSensitive, "c", false, "case sensitive")
+	flag.Parse()
+
+	argKeywords = flag.Args()
+	argDirPath = strings.TrimSpace(argDirPath)
+	argEditor = strings.TrimSpace(argEditor)
+	if !argCaseSensitive {
+		for idx, keyword := range argKeywords {
+			argKeywords[idx] = strings.ToLower(keyword)
+		}
+	}
+}
+
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Println("error: len(os.Args)<2")
+	parseArg()
+	if len(argKeywords) == 0 {
+		fmt.Println("error: len(keywords)==0")
 		return
 	}
 
 	fmt.Println()
 
-	dirPath := "D:\\myshare\\Dropbox\\root\\md"
-	keywords := os.Args[1:]
-
-	var toSearch []string
 	fileChan := make(chan string, 1024)
 	targetChan := make(chan string, 1024)
 	syncChan := make(chan struct{}, 20)
 	endChan := make(chan struct{}, 1)
 
-	toLower(keywords)
-	go printResult(targetChan, &toSearch, endChan)
-	go filter(fileChan, syncChan, targetChan, keywords)
-	go Walk(dirPath, fileChan)
+	go printResult(targetChan, endChan)
+	go filter(fileChan, syncChan, targetChan, argKeywords)
+	go Walk(argDirPath, fileChan)
 	<-endChan
 
 	indexes := getIndexes()
-	files := getFiles(toSearch, indexes)
-	openInVSCode(files)
+	files := getFiles(indexes)
+	openFile(argEditor, files)
 }
