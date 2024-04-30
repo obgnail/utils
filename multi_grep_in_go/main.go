@@ -121,10 +121,9 @@ func getFiles(indexes []int) []string {
 
 	var files []string
 	for _, idx := range indexes {
-		if idx > len(found)-1 || idx < 0 {
-			continue
+		if 0 <= idx && idx <= len(found)-1 {
+			files = append(files, found[idx])
 		}
-		files = append(files, found[idx])
 	}
 
 	return files
