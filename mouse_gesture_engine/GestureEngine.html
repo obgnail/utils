@@ -1,0 +1,1318 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gesture Engine</title>
+    <style>
+* { box-sizing: border-box; outline: none; margin: 0; padding: 0; }
+body, html { height: 100%; font-family: system-ui, -apple-system, sans-serif; background-color: #16161e; color: #a9b1d6; overflow: hidden; touch-action: none; }
+.app-container { display: flex; width: 100vw; height: 100vh; overflow: hidden; }
+.sidebar { width: 365px; background: rgba(26, 27, 38, 0.95); display: flex; flex-direction: column; z-index: 1000; backdrop-filter: blur(10px); box-shadow: 0 0 30px rgba(0, 0, 0, 0.5); border-right: 1px solid #292e42; }
+.sidebar.right { width: 320px; border-right: none; border-left: 1px solid #292e42; }
+.sidebar-header { padding: 18px; border-bottom: 1px solid #292e42; display: flex; align-items: center; gap: 10px; background: #1a1b26; font-weight: 600; font-size: 16px; color: #7aa2f7; flex-shrink: 0; }
+.sidebar-content { flex: 1; overflow-y: auto; padding: 18px; scrollbar-width: thin; scrollbar-color: #414868 transparent; }
+.config-section { background: #1f2335; border-radius: 12px; padding: 16px; margin-bottom: 20px; border: 1px solid #292e42; box-shadow: inset 0 2px 10px rgba(0,0,0,0.1); }
+.section-title { font-size: 14px; font-weight: 700; color: #7aa2f7; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #292e42; padding-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; }
+.sandbox-area { flex: 1; position: relative; background-color: #1a1b26; background-image: radial-gradient(#292e42 1.5px, transparent 1.5px); background-size: 24px 24px; display: flex; justify-content: center; align-items: center; overflow: hidden; }
+.sandbox-title { position: absolute; font-size: 40px; font-weight: 900; color: rgba(255, 255, 255, 0.15); text-transform: uppercase; letter-spacing: 5px; pointer-events: none; user-select: none; z-index: 1; }
+.gesture-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 9998; visibility: hidden; opacity: 0; transition: opacity 0.1s ease; }
+.gesture-canvas.active { visibility: visible; opacity: 1; }
+.gesture-hud { position: absolute; bottom: 15%; left: 50%; transform: translateX(-50%); font-size: clamp(40px, 6vw, 80px); max-width: 90vw; word-break: break-all; text-align: center; line-height: 1.2; font-weight: 900; letter-spacing: 12px; z-index: 9999; font-family: "Segoe UI Symbol", "Apple Color Emoji", sans-serif; pointer-events: none; visibility: hidden; opacity: 0; text-shadow: 0 10px 30px rgba(0, 0, 0, 0.8); transition: opacity 0.2s ease, color 0.1s ease; }
+.gesture-hud.active { visibility: visible; opacity: 1; }
+.control-group { margin-bottom: 20px; position: relative; }
+.control-group:last-child { margin-bottom: 0; }
+.control-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 13px; color: #7dcfff; font-weight: 600; }
+.control-value { font-family: monospace; background: #16161e; padding: 2px 8px; border-radius: 4px; color: #9ece6a; font-size: 12px; border: 1px solid #292e42; }
+select, input[type="text"] { width: 100%; padding: 10px; border-radius: 6px; background: #16161e; color: #c0caf5; border: 1px solid #414868; cursor: pointer; font-size: 13px; appearance: none; }
+select:hover, input[type="text"]:focus { border-color: #7aa2f7; }
+input[type="range"] { -webkit-appearance: none; width: 100%; background: transparent; }
+input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%; background: #7aa2f7; cursor: pointer; margin-top: -6px; box-shadow: 0 0 10px rgba(122, 162, 247, 0.5); }
+input[type="range"]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: #292e42; border-radius: 2px; }
+input[type="range"]:focus::-webkit-slider-thumb { background: #7dcfff; }
+.checkbox-group { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.checkbox-label { display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; background: #16161e; padding: 6px 10px; border-radius: 6px; border: 1px solid #292e42; transition: all 0.2s; }
+.checkbox-label:hover { border-color: #7aa2f7; }
+.checkbox-label input { cursor: pointer; accent-color: #7aa2f7; }
+.plugin-toggle-label { display: flex; align-items: center; gap: 8px; cursor: pointer; width: 100%; }
+.plugin-toggle-label span { color: #bb9af7; font-size: 14px; font-weight: 700; }
+.btn-group { display: flex; gap: 10px; }
+.action-btn { flex: 1; padding: 12px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; font-size: 13px; display: flex; justify-content: center; align-items: center; gap: 8px; transition: transform 0.1s, filter 0.2s; background: #7aa2f7; color: #1a1b26; }
+.action-btn:active { transform: scale(0.95); }
+.action-btn:hover { filter: brightness(1.2); }
+#pause-btn { background: #e0af68; }
+#destroy-btn { background: #f7768e; }
+.log-container { display: flex; flex-direction: column; gap: 12px; }
+.log-item { background: #1f2335; padding: 14px; border-radius: 10px; border: 1px solid #292e42; border-left: 4px solid #414868; font-family: "Fira Code", monospace; font-size: 13px; line-height: 1.5; animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1); box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2); }
+.log-item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 11px; color: #565f89; }
+.log-item-content { color: #c0caf5; word-break: break-all; }
+.log-item.info { border-left-color: #7aa2f7; }
+.log-item.success { border-left-color: #9ece6a; }
+.log-item.success b { color: #9ece6a; font-size: 16px; margin: 0 4px; }
+.log-item.warn { border-left-color: #e0af68; }
+.log-item.warn .log-item-content { color: #e0af68; }
+.log-item.error { border-left-color: #f7768e; }
+.log-item.error .log-item-content { color: #f7768e; }
+.log-item.action { border-left-color: #bb9af7; }
+.log-item.action .log-item-content { color: #bb9af7; font-weight: bold; font-size: 14px; }
+@keyframes slideIn { from { opacity: 0; transform: translateX(18px) scale(0.95); } to { opacity: 1; transform: translateX(0) scale(1); } }
+.action-form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.action-list { display: flex; flex-direction: column; gap: 6px; max-height: 250px; overflow-y: auto; padding-right: 4px; scrollbar-width: thin; scrollbar-color: #414868 transparent; }
+.action-item { display: flex; justify-content: space-between; align-items: center; background: #16161e; padding: 8px 10px; border-radius: 6px; border: 1px solid #292e42; font-size: 12px; }
+.action-item .kbd { background: #24283b; padding: 2px 6px; border-radius: 4px; border: 1px solid #414868; font-family: monospace; color: #7aa2f7; margin-left: 6px; }
+.del-btn { background: #f7768e; color: #1a1b26; border: none; border-radius: 4px; cursor: pointer; padding: 4px 8px; font-weight: bold; font-size: 12px; transition: transform 0.1s; }
+.del-btn:active { transform: scale(0.9); }
+</style>
+  </head>
+  <body>
+    <div class="app-container">
+      <aside class="sidebar left">
+        <div class="sidebar-header">引擎控制台</div>
+        <div class="sidebar-content">
+          <div class="config-section core-group">
+            <div class="section-title">基础配置 (Base)</div>
+            <div class="control-group">
+              <div class="control-header"><span>指针类型 (Pointer
+                  Types)</span></div>
+              <div class="checkbox-group">
+                <label class="checkbox-label"><input type="checkbox"
+                    class="cfg-pointer" value="mouse" checked>鼠标</label>
+                <label class="checkbox-label"><input type="checkbox"
+                    class="cfg-pointer" value="pen" checked>触控笔</label>
+                <label class="checkbox-label"><input type="checkbox"
+                    class="cfg-pointer" value="touch" checked>触摸屏</label>
+              </div>
+            </div>
+            <div class="control-group">
+              <div class="control-header"><span>触发按键 (Trigger
+                  Buttons)</span></div>
+              <div class="checkbox-group">
+                <label class="checkbox-label"><input type="checkbox"
+                    class="cfg-button" value="1" checked>中键</label>
+                <label class="checkbox-label"><input type="checkbox"
+                    class="cfg-button" value="2" checked>右键</label>
+                <label class="checkbox-label"><input type="checkbox"
+                    class="cfg-button" value="3" checked>X1</label>
+                <label class="checkbox-label"><input type="checkbox"
+                    class="cfg-button" value="4" checked>X2</label>
+              </div>
+            </div>
+          </div>
+          <div class="config-section core-group">
+            <div class="section-title">策略配置 (Strategy)</div>
+            <div class="control-group">
+              <div class="control-header"><span>识别策略 (Strategy)</span></div>
+              <select id="strategy">
+                <option value="fourWay">4 方向 (上下左右)</option>
+                <option value="eightWay">8 方向 (包含斜角)</option>
+                <option value="adaptive" selected>智能降级 (推荐)</option>
+              </select>
+            </div>
+            <div class="control-group">
+              <div class="control-header">
+                <span>宏观半径</span><span class="control-value"
+                  id="val-macro">35px</span>
+              </div>
+              <input type="range" id="macro-radius" min="10" max="150"
+                value="35">
+              <div style="height: 15px;"></div>
+              <div class="control-header">
+                <span>收尾半径</span><span class="control-value"
+                  id="val-tail">15px</span>
+              </div>
+              <input type="range" id="tail-radius" min="5" max="100" value="15">
+            </div>
+            <div class="control-group">
+              <div class="control-header">
+                <span>滞回容差</span><span class="control-value"
+                  id="val-hysteresis">10°</span>
+              </div>
+              <input type="range" id="hysteresis" min="0" max="45" value="10">
+            </div>
+          </div>
+          <div class="config-section plugin-group">
+            <div class="section-title">扩展插件 (Plugins)</div>
+            <div class="control-group">
+              <div class="control-header" style="margin-bottom: 20px;">
+                <label class="plugin-toggle-label">
+                  <input type="checkbox" id="toggle-timeout" checked
+                    style="accent-color: #bb9af7;">
+                  <span>⏱️ 超时阻断 (Timeout)</span>
+                </label>
+              </div>
+              <div class="control-header">
+                <span>起始超时</span><span class="control-value"
+                  id="val-start">1000ms</span>
+              </div>
+              <input type="range" id="start-timeout" min="0" max="3000"
+                step="100" value="1000">
+              <div style="height: 15px;"></div>
+              <div class="control-header">
+                <span>静止超时</span><span class="control-value"
+                  id="val-idle">2000ms</span>
+              </div>
+              <input type="range" id="idle-timeout" min="0" max="5000"
+                step="100" value="2000">
+            </div>
+            <div class="control-group">
+              <div class="control-header" style="margin-bottom: 20px;">
+                <label class="plugin-toggle-label">
+                  <input type="checkbox" id="toggle-suppressor" checked
+                    style="accent-color: #bb9af7;">
+                  <span>🛡️ 抑制器 (Suppressor)</span>
+                </label>
+              </div>
+              <select id="suppress">
+                <option value="alt" selected>按住 Alt 键</option>
+                <option value="shift">按住 Shift 键</option>
+                <option value="ctrl">按住 Ctrl 键</option>
+              </select>
+            </div>
+            <div class="control-group">
+              <div class="control-header" style="margin-bottom: 20px;">
+                <label class="plugin-toggle-label">
+                  <input type="checkbox" id="toggle-visualizer" checked
+                    style="accent-color: #bb9af7;">
+                  <span>🎨 轨迹回显 (Visualizer)</span>
+                </label>
+              </div>
+              <div class="control-header">
+                <span>轨迹线宽</span><span class="control-value"
+                  id="val-linewidth">6px</span>
+              </div>
+              <input type="range" id="line-width" min="1" max="20" value="6">
+              <div style="height: 15px;"></div>
+              <div class="control-header">
+                <span>采样间距</span><span class="control-value"
+                  id="val-vis-dist">2px</span>
+              </div>
+              <input type="range" id="vis-dist" min="1" max="20" value="2">
+              <div style="height: 15px;"></div>
+              <div class="control-header">
+                <span>内存点数</span><span class="control-value"
+                  id="val-vis-points">1000</span>
+              </div>
+              <input type="range" id="vis-points" min="100" max="5000"
+                step="100" value="1000">
+              <div style="height: 15px;"></div>
+              <div class="control-header">
+                <span>清除延迟</span><span class="control-value"
+                  id="val-vis-cleanup">200ms</span>
+              </div>
+              <input type="range" id="vis-cleanup" min="0" max="2000" step="50"
+                value="200">
+            </div>
+            <div class="control-group">
+              <div class="control-header" style="margin-bottom: 20px;">
+                <label class="plugin-toggle-label">
+                  <input type="checkbox" id="toggle-hud" checked
+                    style="accent-color: #bb9af7;">
+                  <span>💡 抬头显示 (HUD)</span>
+                </label>
+              </div>
+              <div class="control-header">
+                <span>清除延迟</span><span class="control-value"
+                  id="val-hud-cleanup">200ms</span>
+              </div>
+              <input type="range" id="hud-cleanup" min="0" max="2000" step="50"
+                value="200">
+            </div>
+            <div class="control-group">
+              <div class="control-header" style="margin-bottom: 10px;">
+                <label class="plugin-toggle-label">
+                  <input type="checkbox" id="toggle-sensory" checked
+                    style="accent-color: #bb9af7;">
+                  <span>🔊 感官反馈 (Sensory)</span>
+                </label>
+              </div>
+              <div class="checkbox-group">
+                <label class="checkbox-label"><input type="checkbox"
+                    id="cfg-audio" checked>音效反馈</label>
+                <label class="checkbox-label"><input type="checkbox"
+                    id="cfg-vibrate" checked>物理震动</label>
+              </div>
+            </div>
+            <div class="control-group action-plugin-group">
+              <div class="control-header" style="margin-bottom: 20px;">
+                <label class="plugin-toggle-label">
+                  <input type="checkbox" id="toggle-action" checked
+                    style="accent-color: #bb9af7;">
+                  <span>⚡ 动作管理 (Actions)</span>
+                </label>
+              </div>
+              <div class="control-header">
+                <span>全局冷却</span><span class="control-value"
+                  id="val-cooldown">0ms</span>
+              </div>
+              <input type="range" id="cfg-cooldown" min="0" max="2000"
+                step="100" value="0">
+              <div style="height: 15px;"></div>
+              <div class="action-form">
+                <select id="new-act-btn">
+                  <option value="right">右键</option>
+                  <option value="middle">中键</option>
+                  <option value="x1">X1</option>
+                  <option value="x2">X2</option>
+                  <option value="any">任意键</option>
+                </select>
+                <input type="text" id="new-act-path" placeholder="轨迹(例如 ↓→)">
+                <input type="text" id="new-act-name" placeholder="动作名称">
+                <button id="add-act-btn" class="action-btn">添加动作</button>
+              </div>
+              <div id="action-list" class="action-list"></div>
+            </div>
+
+          </div>
+          <div class="btn-group">
+            <button id="pause-btn" class="action-btn">⏸️ 暂停引擎</button>
+            <button id="destroy-btn" class="action-btn">💥 销毁引擎</button>
+          </div>
+        </div>
+      </aside>
+      <main class="sandbox-area" id="gesture-area">
+        <div class="sandbox-title">Gesture Sandbox</div>
+        <canvas id="gesture-canvas" class="gesture-canvas"></canvas>
+        <div id="gesture-hud" class="gesture-hud"></div>
+      </main>
+      <aside class="sidebar right">
+        <div class="sidebar-header">应用事件流</div>
+        <div class="sidebar-content" id="log-wrapper">
+          <div class="log-container" id="log-flow"></div>
+        </div>
+      </aside>
+    </div>
+
+    <script>
+const RAD_TO_DEG = 180 / Math.PI
+
+class BaseGestureStrategy {
+    _state = { changed: false, newDirection: null, paths: [] }
+
+    constructor(options = {}, calcDirection) {
+        this.options = { macroRadius: 35, tailRadius: 15, ...options }
+        this.macroRadiusSq = this.options.macroRadius ** 2
+        this.tailRadiusSq = this.options.tailRadius ** 2
+        this.calcDirection = calcDirection
+    }
+
+    initialize = (x, y) => {
+        this.anchorX = x
+        this.anchorY = y
+        this.paths = []
+        this._state.changed = true
+        this._state.newDirection = null
+        this._state.paths = this.paths
+        return this._state
+    }
+
+    _processPoint = (x, y, thresholdSq) => {
+        let changed = false
+        let newDirection = null
+        if (this.anchorX === undefined) {
+            this._state.changed = changed
+            this._state.newDirection = newDirection
+            this._state.paths = this.paths
+            return this._state
+        }
+        const dx = x - this.anchorX
+        const dy = y - this.anchorY
+        const distSq = dx * dx + dy * dy
+        if (distSq >= thresholdSq) {
+            const angle = Math.atan2(dy, dx) * RAD_TO_DEG
+            const direction = this.calcDirection(angle, this.paths)
+            if (this.paths.length === 0 || this.paths[this.paths.length - 1] !== direction) {
+                this.paths.push(direction)
+                changed = true
+                newDirection = direction
+            }
+            this.anchorX = x
+            this.anchorY = y
+        }
+        this._state.changed = changed
+        this._state.newDirection = newDirection
+        this._state.paths = this.paths
+        return this._state
+    }
+
+    processMove = (x, y) => this._processPoint(x, y, this.macroRadiusSq)
+    processEnd = (x, y) => this._processPoint(x, y, this.tailRadiusSq)
+    isActive = () => this.paths.length > 0
+}
+
+class Strategy4Way extends BaseGestureStrategy {
+    constructor(options = {}) {
+        const calcDirection = (angle) => (angle >= -45 && angle < 45) ? "→" : (angle >= 45 && angle < 135) ? "↓" : (angle >= -135 && angle < -45) ? "↑" : "←"
+        super(options, calcDirection)
+    }
+}
+
+class Strategy8Way extends BaseGestureStrategy {
+    constructor(options = {}) {
+        const calcDirection = (angle) => (angle >= -22.5 && angle < 22.5) ? "→" : (angle >= 22.5 && angle < 67.5) ? "↘" : (angle >= 67.5 && angle < 112.5) ? "↓" : (angle >= 112.5 && angle < 157.5) ? "↙" : (angle >= 157.5 || angle < -157.5) ? "←" : (angle >= -157.5 && angle < -112.5) ? "↖" : (angle >= -112.5 && angle < -67.5) ? "↑" : "↗"
+        super(options, calcDirection)
+    }
+}
+
+class Strategy4WayHysteresis extends BaseGestureStrategy {
+    constructor(options = {}) {
+        const h = options.hysteresis ?? 15
+        super(options, (angle, paths) => {
+            let sR = Math.abs(angle)
+            let sD = Math.abs(angle - 90)
+            let sL = Math.abs(Math.abs(angle) - 180)
+            let sU = Math.abs(angle + 90)
+            const last = paths.length > 0 ? paths[paths.length - 1] : null
+            if (last === "→") sR -= h
+            else if (last === "↓") sD -= h
+            else if (last === "←") sL -= h
+            else if (last === "↑") sU -= h
+            if (sR <= sD && sR <= sL && sR <= sU) return "→"
+            if (sD <= sR && sD <= sL && sD <= sU) return "↓"
+            if (sL <= sR && sL <= sD && sL <= sU) return "←"
+            return "↑"
+        })
+    }
+}
+
+class Strategy8WayHysteresis extends BaseGestureStrategy {
+    constructor(options = {}) {
+        const h = options.hysteresis ?? 8
+        super(options, (angle, paths) => {
+            let sR = Math.abs(angle)
+            let sDR = Math.abs(angle - 45)
+            let sD = Math.abs(angle - 90)
+            let sDL = Math.abs(angle - 135)
+            let sL = Math.abs(Math.abs(angle) - 180)
+            let sUL = Math.abs(angle + 135)
+            let sU = Math.abs(angle + 90)
+            let sUR = Math.abs(angle + 45)
+            const last = paths.length > 0 ? paths[paths.length - 1] : null
+            if (last === "→") sR -= h
+            else if (last === "↘") sDR -= h
+            else if (last === "↓") sD -= h
+            else if (last === "↙") sDL -= h
+            else if (last === "←") sL -= h
+            else if (last === "↖") sUL -= h
+            else if (last === "↑") sU -= h
+            else if (last === "↗") sUR -= h
+            let min = sR, dir = "→"
+            if (sDR < min) { min = sDR; dir = "↘" }
+            if (sD < min) { min = sD; dir = "↓" }
+            if (sDL < min) { min = sDL; dir = "↙" }
+            if (sL < min) { min = sL; dir = "←" }
+            if (sUL < min) { min = sUL; dir = "↖" }
+            if (sU < min) { min = sU; dir = "↑" }
+            if (sUR < min) { min = sUR; dir = "↗" }
+            return dir
+        })
+    }
+}
+
+class BaseAdaptiveStrategy {
+    _wasDegraded = false
+    _state = { changed: false, newDirection: null, paths: [] }
+
+    constructor(fallbackStrategy, primaryStrategy) {
+        this._fallback = fallbackStrategy
+        this._primary = primaryStrategy
+    }
+
+    initialize = (x, y) => {
+        this._fallback.initialize(x, y)
+        this._primary.initialize(x, y)
+        this._wasDegraded = false
+        this._state.changed = true
+        this._state.newDirection = null
+        this._state.paths = []
+        return this._state
+    }
+
+    _dispatch = (x, y, methodName) => {
+        const stateFallback = this._fallback[methodName](x, y)
+        if (this._wasDegraded) return stateFallback
+        const statePrimary = this._primary[methodName](x, y)
+        if (this._primary.paths.length > 1) {
+            this._wasDegraded = true
+            this._state.changed = stateFallback.changed
+            this._state.paths = stateFallback.paths
+            this._state.newDirection = stateFallback.changed ? stateFallback.newDirection : null
+            return this._state
+        }
+        return statePrimary
+    }
+
+    processMove = (x, y) => this._dispatch(x, y, "processMove")
+    processEnd = (x, y) => this._dispatch(x, y, "processEnd")
+    isActive = () => this._wasDegraded ? this._fallback.isActive() : this._primary.isActive()
+}
+
+class StrategyAdaptive extends BaseAdaptiveStrategy {
+    constructor(options = {}) {
+        super(new Strategy4Way(options), new Strategy8Way(options))
+    }
+}
+
+class StrategyAdaptiveHysteresis extends BaseAdaptiveStrategy {
+    constructor(options = {}) {
+        super(new Strategy4WayHysteresis(options), new Strategy8WayHysteresis(options))
+    }
+}
+
+class GestureEngine {
+    plugins = new Map()
+    isTracking = false
+    isAborted = false
+    isPaused = false
+    hasMovedSinceStart = false
+    lastMoveTimestamp = 0
+    currentTriggerButton = null
+    _sharedMovePayload = {
+        point: { x: 0, y: 0 },
+        paths: null,
+        triggerButton: null,
+        originalEvent: null,
+    }
+
+    constructor(options = {}) {
+        this.options = {
+            targetElement: document,
+            triggerButtons: [2],
+            allowedPointerTypes: ["mouse", "pen"],
+            strategy: null,
+            ...options,
+        }
+        this.setStrategy(this.options.strategy)
+        this._bindEvents()
+    }
+
+    updateConfig = (newConfig) => this.options = { ...this.options, ...newConfig }
+
+    setStrategy = (strategyImpl) => {
+        this._validateStrategy(strategyImpl)
+        this.activeStrategy = strategyImpl
+    }
+
+    use = (plugin) => {
+        if (!plugin || typeof plugin.id !== "string") {
+            throw new TypeError("[GestureEngine] plugin must have a valid 'id'.")
+        }
+        if (typeof plugin.install !== "function") {
+            throw new TypeError(`[GestureEngine] plugin '${plugin.id}' must have an 'install' method.`)
+        }
+        if (!this.plugins.has(plugin.id)) {
+            plugin.install(this)
+            this.plugins.set(plugin.id, plugin)
+        } else {
+            console.warn(`[GestureEngine] Plugin with id '${plugin.id}' is already installed.`)
+        }
+        return this
+    }
+
+    unuse = (pluginOrId) => {
+        const id = typeof pluginOrId === "string" ? pluginOrId : pluginOrId?.id
+        if (id && this.plugins.has(id)) {
+            this.plugins.get(id)?.uninstall?.()
+            this.plugins.delete(id)
+        }
+        return this
+    }
+
+    getPlugin = (id) => this.plugins.get(id)
+
+    pause = () => {
+        if (this.isPaused) return
+        this.isPaused = true
+        if (this.isTracking) this.abort("paused")
+        this._invokeHook("onPaused", null)
+    }
+
+    resume = () => {
+        if (!this.isPaused) return
+        this.isPaused = false
+        this._invokeHook("onResumed", null)
+    }
+
+    abort = (reason = "aborted") => {
+        if (!this.isTracking || this.isAborted) return
+        this.isTracking = false
+        this.isAborted = true
+        this.currentTriggerButton = null
+        this._invokeHook("onAbort", { reason })
+    }
+
+    destroy = () => {
+        this._unbindEvents()
+        this.plugins.forEach(p => p.uninstall?.())
+        this.plugins.clear()
+        this._invokeHook("onDestroyed", null)
+    }
+
+    getHasMoved = () => this.hasMovedSinceStart
+    getLastMoveTimestamp = () => this.lastMoveTimestamp
+
+    _invokeHook = (hookName, payload) => {
+        for (const plugin of this.plugins.values()) plugin[hookName]?.(payload)
+    }
+
+    _invokeBailoutHook = (hookName, payload) => {
+        for (const plugin of this.plugins.values()) {
+            if (plugin[hookName]?.(payload) === false) return false
+        }
+        return true
+    }
+
+    _validateStrategy = (strategyImpl) => {
+        if (!strategyImpl) throw new Error("A valid strategy instance must be provided.")
+        const requiredMethods = ["initialize", "processMove", "processEnd", "isActive"]
+        for (const method of requiredMethods) {
+            if (typeof strategyImpl[method] !== "function") throw new TypeError(`Missing method: '${method}'`)
+        }
+    }
+
+    _toggleEvents = (enable) => {
+        const fn = enable ? "addEventListener" : "removeEventListener"
+        const target = this.options.targetElement
+        const blockOpts = { capture: true, passive: false }
+        const passiveOpts = { capture: true, passive: true }
+        target[fn]("pointerdown", this._onPointerDown, blockOpts)
+        target[fn]("pointermove", this._onPointerMove, passiveOpts)
+        target[fn]("pointerup", this._onPointerUp, passiveOpts)
+        target[fn]("pointercancel", this._onPointerCancel, passiveOpts)
+        target[fn]("contextmenu", this._onNativeBehavior, blockOpts)
+        target[fn]("mousedown", this._onNativeBehavior, blockOpts)
+        target[fn]("mouseup", this._onNativeBehavior, blockOpts)
+        
+    }
+
+    _bindEvents = () => this._toggleEvents(true)
+    _unbindEvents = () => this._toggleEvents(false)
+
+    _onNativeBehavior = (ev) => {
+        if (this.isPaused) return
+        if (!this.options.triggerButtons.includes(ev.button)) return
+        if (ev.button === 1 && ev.type === "mousedown") {
+            ev.preventDefault()
+            return
+        }
+        if (this.hasMovedSinceStart) {
+            ev.preventDefault()
+            ev.stopPropagation()
+        }
+    }
+
+    _onPointerDown = (ev) => {
+        if (this.isTracking || this.isPaused) return
+        if (this.options.allowedPointerTypes && !this.options.allowedPointerTypes.includes(ev.pointerType)) return
+        if (!this.options.triggerButtons.includes(ev.button)) return
+
+        const payload = { originalEvent: ev, triggerButton: ev.button }
+        if (this._invokeBailoutHook("onBeforeStart", payload) === false) {
+            this._invokeHook("onSuppressed", payload)
+            return
+        }
+
+        ev.target.setPointerCapture?.(ev.pointerId)
+
+        this.isTracking = true
+        this.isAborted = false
+        this.hasMovedSinceStart = false
+        this.currentTriggerButton = ev.button
+        this.lastMoveTimestamp = ev.timeStamp
+
+        const x = ev.clientX
+        const y = ev.clientY
+        const state = this.activeStrategy.initialize(x, y)
+        this._invokeHook("onStart", { point: { x, y }, triggerButton: this.currentTriggerButton, originalEvent: ev })
+        if (state.changed) {
+            this._invokeHook("onPathChange", { paths: state.paths, newDirection: state.newDirection, triggerButton: this.currentTriggerButton })
+        }
+    }
+
+    _onPointerMove = (ev) => {
+        if (!this.isTracking || this.isAborted) return
+        this.hasMovedSinceStart = true
+        this.lastMoveTimestamp = ev.timeStamp
+
+        const x = ev.clientX
+        const y = ev.clientY
+        const state = this.activeStrategy.processMove(x, y)
+
+        this._sharedMovePayload.point.x = x
+        this._sharedMovePayload.point.y = y
+        this._sharedMovePayload.paths = state.paths
+        this._sharedMovePayload.triggerButton = this.currentTriggerButton
+        this._sharedMovePayload.originalEvent = ev
+        this._invokeHook("onMove", this._sharedMovePayload)
+
+        if (state.changed) {
+            this._invokeHook("onPathChange", { paths: state.paths, newDirection: state.newDirection, triggerButton: this.currentTriggerButton })
+        }
+    }
+
+    _onPointerUp = (ev) => {
+        if (!this.isTracking || this.isAborted || ev.button !== this.currentTriggerButton) return
+
+        ev.target.releasePointerCapture?.(ev.pointerId)
+        this.isTracking = false
+
+        const state = this.activeStrategy.processEnd(ev.clientX, ev.clientY)
+        if (state.changed) {
+            this._invokeHook("onPathChange", { paths: state.paths, newDirection: state.newDirection, triggerButton: this.currentTriggerButton })
+        }
+        this._invokeHook("onEnd", { paths: state.paths, gestureCode: state.paths.join(""), triggerButton: this.currentTriggerButton, originalEvent: ev })
+        this.currentTriggerButton = null
+    }
+
+    _onPointerCancel = (ev) => {
+        if (this.isTracking) {
+            ev.target.releasePointerCapture?.(ev.pointerId)
+            this.abort("systemCancel")
+        }
+    }
+}
+
+class PluginTimeout {
+    id = "timeout"
+    watchdogTimer = null
+
+    constructor(options = {}) {
+        this.options = { startTimeout: 1000, idleTimeout: 2000, pollInterval: 100, ...options }
+    }
+
+    updateConfig = (newConfig) => this.options = { ...this.options, ...newConfig }
+
+    install = (engine) => {
+        if (this.engine) this.uninstall()
+        this.engine = engine
+    }
+
+    uninstall = () => {
+        this._clearWatchdog()
+        this.engine = null
+    }
+
+    _clearWatchdog = () => {
+        if (this.watchdogTimer) {
+            clearInterval(this.watchdogTimer)
+            this.watchdogTimer = null
+        }
+    }
+
+    _checkTimeout = () => {
+        const elapsed = performance.now() - this.engine.getLastMoveTimestamp()
+        if (this.engine.getHasMoved()) {
+            if (this.options.idleTimeout > 0 && elapsed >= this.options.idleTimeout) {
+                this.engine.abort("idleTimeout")
+            }
+        } else {
+            if (this.options.startTimeout > 0 && elapsed >= this.options.startTimeout) {
+                this.engine.abort("startTimeout")
+            }
+        }
+    }
+
+    onStart = () => {
+        this._clearWatchdog()
+        if (this.options.startTimeout > 0 || this.options.idleTimeout > 0) {
+            this.watchdogTimer = setInterval(this._checkTimeout, this.options.pollInterval)
+        }
+    }
+
+    onEnd = () => this._clearWatchdog()
+    onAbort = () => this._clearWatchdog()
+    onDestroyed = () => this._clearWatchdog()
+}
+
+class PluginSuppressor {
+    id = "suppressor"
+
+    constructor(options = {}) {
+        this.options = { suppressorFn: (ev, triggerButton) => ev.altKey === true, ...options }
+    }
+
+    updateConfig = (newConfig) => this.options = { ...this.options, ...newConfig }
+
+    install = (engine) => {
+        if (this.engine) this.uninstall()
+        this.engine = engine
+    }
+
+    uninstall = () => {
+        this.engine = null
+    }
+
+    onBeforeStart = (payload) => !this.options.suppressorFn?.(payload.originalEvent, payload.triggerButton)
+}
+
+class PluginVisualizer {
+    id = "visualizer"
+    currentColor = ""
+    currentRect = { left: 0, top: 0, width: 0, height: 0 }
+    engine = null
+    rafId = null
+    timeoutId = null
+
+    constructor(el, options = {}) {
+        this.canvasEl = el
+        this.ctx = el.getContext("2d")
+        this.options = { lineWidth: 5, cleanupDelay: 200, minDrawDistance: 2, maxPoints: 1000, autoUpdateSize: true, colorFormatter: () => "#7dcfff", ...options }
+        this.minDistSq = this.options.minDrawDistance ** 2
+        this.pointBuffer = new Float32Array(this.options.maxPoints * 2)
+        this.pointCount = 0
+    }
+
+    updateConfig = (newConfig = {}) => {
+        this.options = { ...this.options, ...newConfig }
+        if (newConfig.minDrawDistance !== undefined) this.minDistSq = this.options.minDrawDistance ** 2
+        if (newConfig.maxPoints !== undefined && newConfig.maxPoints !== this.pointBuffer.length / 2) {
+            this.pointBuffer = new Float32Array(this.options.maxPoints * 2)
+            this._clearCanvas()
+        }
+    }
+
+    install = (engine) => {
+        if (this.engine) this.uninstall()
+        this.engine = engine
+    }
+
+    uninstall = () => {
+        this._clearTimers()
+        this._clearCanvas()
+        this.engine = null
+    }
+
+    _clearTimers = () => {
+        if (this.rafId) cancelAnimationFrame(this.rafId)
+        if (this.timeoutId) clearTimeout(this.timeoutId)
+        this.rafId = this.timeoutId = null
+    }
+
+    _clearCanvas = () => {
+        this.pointCount = 0
+        this.ctx.setTransform(1, 0, 0, 1, 0, 0)
+        this.ctx.clearRect(0, 0, this.canvasEl.width, this.canvasEl.height)
+    }
+
+    resize = (externalRect) => {
+        const dpr = window.devicePixelRatio || 1
+        this.currentRect = externalRect || this.canvasEl.getBoundingClientRect()
+        this.canvasEl.width = this.currentRect.width * dpr
+        this.canvasEl.height = this.currentRect.height * dpr
+        this.ctx.scale(dpr, dpr)
+    }
+
+    _applyContextStyle = () => {
+        this.ctx.lineWidth = this.options.lineWidth
+        this.ctx.lineCap = this.ctx.lineJoin = "round"
+        this.ctx.strokeStyle = this.currentColor
+    }
+
+    _renderBezier = () => {
+        this.rafId = null
+        const len = this.pointCount
+        if (len < 6) return
+        this.ctx.beginPath()
+        this.ctx.moveTo(this.pointBuffer[0], this.pointBuffer[1])
+        let midX, midY
+        for (let i = 2; i < len - 2; i += 2) {
+            const ctrlX = this.pointBuffer[i]
+            const ctrlY = this.pointBuffer[i + 1]
+            const nextX = this.pointBuffer[i + 2]
+            const nextY = this.pointBuffer[i + 3]
+            midX = (ctrlX + nextX) / 2
+            midY = (ctrlY + nextY) / 2
+            this.ctx.quadraticCurveTo(ctrlX, ctrlY, midX, midY)
+        }
+        this.ctx.stroke()
+        this.pointBuffer[0] = midX
+        this.pointBuffer[1] = midY
+        this.pointBuffer[2] = this.pointBuffer[len - 2]
+        this.pointBuffer[3] = this.pointBuffer[len - 1]
+        this.pointCount = 4
+    }
+
+    onStart = (payload) => {
+        if (!payload?.point) return
+        this._clearTimers()
+        this.canvasEl.classList.add("active")
+        this.currentColor = this.options.colorFormatter(payload.paths || [], payload.triggerButton)
+        if (this.options.autoUpdateSize) this.resize()
+        this._applyContextStyle()
+        this.pointCount = 0
+        this.pointBuffer[this.pointCount++] = payload.point.x - this.currentRect.left
+        this.pointBuffer[this.pointCount++] = payload.point.y - this.currentRect.top
+    }
+
+    onMove = (payload) => {
+        if (!payload?.point) return
+        if (this.pointCount >= this.pointBuffer.length - 1) return
+        const x = payload.point.x - this.currentRect.left
+        const y = payload.point.y - this.currentRect.top
+        if (this.pointCount >= 4) {
+            const dx = x - this.pointBuffer[this.pointCount - 2]
+            const dy = y - this.pointBuffer[this.pointCount - 1]
+            if (dx * dx + dy * dy < this.minDistSq) return
+        }
+        this.pointBuffer[this.pointCount++] = x
+        this.pointBuffer[this.pointCount++] = y
+        const newColor = this.options.colorFormatter(payload.paths || [], payload.triggerButton)
+        if (this.currentColor !== newColor) {
+            this.currentColor = newColor
+            this.ctx.strokeStyle = newColor
+        }
+        if (!this.rafId) this.rafId = requestAnimationFrame(this._renderBezier)
+    }
+
+    onEnd = () => {
+        this._clearTimers()
+        if (this.pointCount >= 6) this._renderBezier()
+        if (this.pointCount === 4) {
+            this.ctx.beginPath()
+            this.ctx.moveTo(this.pointBuffer[0], this.pointBuffer[1])
+            this.ctx.lineTo(this.pointBuffer[2], this.pointBuffer[3])
+            this.ctx.stroke()
+        }
+        this.canvasEl.classList.remove("active")
+        this.timeoutId = setTimeout(() => {
+            this._clearCanvas()
+            this.timeoutId = null
+        }, this.options.cleanupDelay)
+    }
+
+    onAbort = () => {
+        this._clearTimers()
+        this._clearCanvas()
+        this.canvasEl.classList.remove("active")
+    }
+}
+
+class PluginHUD {
+    id = "hud"
+    el = null
+    hideElTimer = null
+    engine = null
+
+    constructor(el, options = {}) {
+        this.el = el
+        this.options = { cleanupDelay: 200, textFormatter: (paths) => paths.join(""), colorFormatter: () => "#7dcfff", ...options }
+    }
+
+    updateConfig = (newConfig = {}) => this.options = { ...this.options, ...newConfig }
+
+    install = (engine) => {
+        if (this.engine) this.uninstall()
+        this.engine = engine
+    }
+
+    uninstall = () => {
+        if (this.hideElTimer) clearTimeout(this.hideElTimer)
+        this.engine = null
+    }
+
+    onStart = () => {
+        if (this.hideElTimer) clearTimeout(this.hideElTimer)
+        this.el.classList.add("active")
+    }
+
+    onPathChange = (payload) => {
+        this.el.textContent = this.options.textFormatter(payload.paths, payload.triggerButton)
+        this.el.style.color = this.options.colorFormatter(payload.paths, payload.triggerButton)
+    }
+
+    onEnd = () => {
+        this.el.classList.remove("active")
+        this.hideElTimer = setTimeout(() => {
+            this.el.textContent = ""
+            this.el.style.removeProperty("color")
+        }, this.options.cleanupDelay)
+    }
+
+    onAbort = () => {
+        if (this.hideElTimer) clearTimeout(this.hideElTimer)
+        this.el.classList.remove("active")
+        this.el.textContent = ""
+        this.el.style.removeProperty("color")
+    }
+}
+
+class PluginSensory {
+    id = "sensory"
+    _lastPathLength = 0
+
+    constructor(options = {}) {
+        this.options = {
+            enableAudio: true, enableHaptic: false,
+            volFormatter: (paths, type) => ({ tick: 0.1, success: 0.1, error: 0.05, abort: 0.08 })[type] ?? 0.1,
+            freqFormatter: (paths, type) => {
+                if (type !== "tick") return 600
+                return { "↑": 1200, "↗": 1050, "→": 900, "↘": 750, "↓": 600, "↙": 450, "←": 300, "↖": 750 }[paths[paths.length - 1]] || 600
+            },
+            vibrateFormatter: (paths, type) => ({ tick: 10, success: [15, 30, 20], error: [40, 30, 40], abort: [30, 40, 30] })[type] ?? 10,
+            ...options,
+        }
+        const AudioContext = window.AudioContext || window.webkitAudioContext
+        this.audioCtx = this.options.enableAudio && AudioContext ? new AudioContext() : null
+    }
+
+    updateConfig = (newConfig = {}) => this.options = { ...this.options, ...newConfig }
+
+    install = (engine) => {
+        if (this.engine) this.uninstall()
+        this.engine = engine
+    }
+
+    uninstall = () => {
+        this.engine = null
+    }
+
+    _initAudio = () => {
+        if (this.audioCtx?.state === "suspended") this.audioCtx.resume()
+    }
+
+    _playTone = (freq, type, duration, vol) => {
+        if (!this.audioCtx || !this.options.enableAudio || vol <= 0) return
+        const osc = this.audioCtx.createOscillator()
+        const gain = this.audioCtx.createGain()
+        osc.type = type
+        const now = this.audioCtx.currentTime
+        osc.frequency.setValueAtTime(freq, now)
+        gain.gain.setValueAtTime(0, now)
+        gain.gain.linearRampToValueAtTime(vol, now + 0.005)
+        gain.gain.exponentialRampToValueAtTime(0.001, now + duration)
+        osc.connect(gain)
+        gain.connect(this.audioCtx.destination)
+        osc.start(now)
+        osc.stop(now + duration)
+    }
+
+    _vibrate = (pattern) => {
+        if (this.options.enableHaptic) navigator.vibrate?.(pattern)
+    }
+
+    onStart = () => {
+        this._initAudio()
+        this._lastPathLength = 0
+    }
+
+    onPathChange = (payload) => {
+        const paths = payload.paths
+        if (!paths) return
+        if (paths.length > this._lastPathLength) {
+            this._lastPathLength = paths.length
+            this._playTone(this.options.freqFormatter(paths, "tick"), "triangle", 0.02, this.options.volFormatter(paths, "tick"))
+            this._vibrate(this.options.vibrateFormatter(paths, "tick"))
+        }
+    }
+
+    onAbort = () => {
+        this._playTone(150, "sawtooth", 0.15, this.options.volFormatter([], "abort"))
+        this._vibrate(this.options.vibrateFormatter([], "abort"))
+    }
+
+    playSuccess = (paths = []) => {
+        this._initAudio()
+        const vol = this.options.volFormatter(paths, "success")
+        this._playTone(600, "sine", 0.1, vol)
+        setTimeout(() => this._playTone(900, "sine", 0.15, vol), 80)
+        this._vibrate(this.options.vibrateFormatter(paths, "success"))
+    }
+
+    playError = (paths = []) => {
+        this._initAudio()
+        this._playTone(200, "square", 0.15, this.options.volFormatter(paths, "error"))
+        this._vibrate(this.options.vibrateFormatter(paths, "error"))
+    }
+}
+
+class PluginActionManager {
+    id = "actionManager"
+    actionRegistry = new Map()
+    lastTriggerTimes = new WeakMap()
+    static BUTTON_MAP = { middle: 1, right: 2, x1: 3, x2: 4 }
+
+    constructor({ actions = [], ...options } = {}) {
+        this.options = {
+            globalCooldown: 0,
+            onBeforeAction: () => true,
+            onAfterAction: () => null,
+            onMissed: () => null,
+            onCooldown: () => null,
+            onConditionFailed: () => null,
+            onError: (ctx, err) => console.error(err),
+            ...options,
+        }
+        actions.forEach(action => this.register(action))
+    }
+
+    install = (engine) => {
+        if (this.engine) this.uninstall()
+        this.engine = engine
+    }
+
+    uninstall = () => {
+        this.engine = null
+    }
+
+    _getMatchKey = ({ button, path }) => {
+        if (button == null) return path
+        const code = typeof button === "number" ? button : this.constructor.BUTTON_MAP[String(button).toLowerCase()]
+        return `${code}:${path}`
+    }
+
+    register = (actionDef) => {
+        this.actionRegistry.set(this._getMatchKey(actionDef), actionDef)
+        return this
+    }
+
+    unregister = (actionDef) => {
+        this.actionRegistry.delete(this._getMatchKey(actionDef))
+        return this
+    }
+
+    _resolveAction = (button, code) => {
+        if (!code) return null
+        return this.actionRegistry.get(`${button}:${code}`) || this.actionRegistry.get(code) || null
+    }
+
+    onEnd = (payload) => {
+        const action = this._resolveAction(payload.triggerButton, payload.gestureCode)
+        const context = { payload, action, engine: this.engine, manager: this }
+        if (!context.action) return this.options.onMissed(context)
+        this._executePipeline(context)
+    }
+
+    _executePipeline = (context) => {
+        const { action } = context
+        const now = Date.now()
+        const cooldown = action.cooldown ?? this.options.globalCooldown
+        if (cooldown > 0) {
+            const lastTime = this.lastTriggerTimes.get(action) || 0
+            const remain = cooldown - (now - lastTime)
+            if (remain > 0) return this.options.onCooldown(context, remain)
+        }
+        if (typeof action.condition === "function" && !action.condition(context)) return this.options.onConditionFailed(context)
+        try {
+            if (this.options.onBeforeAction(context) === false) return
+            this.lastTriggerTimes.set(action, now)
+            const result = action.execute(context)
+            this.options.onAfterAction(context, result)
+        } catch (error) {
+            this.options.onError(context, error)
+        }
+    }
+}
+
+class DemoApplication {
+    constructor() {
+        this.btnNames = { 1: "中键", 2: "右键", 3: "X1(侧键)", 4: "X2(侧键)" }
+        this.btnColors = { 1: "#e0af68", 2: "#7dcfff", 3: "#bb9af7", 4: "#f7768e" }
+        this.dom = this._gatherDOM()
+        this._setupEngine()
+        this._setupPlugins()
+        this._bindEvents()
+        this._renderActions()
+        this.log("info", "引擎挂载完毕", "🚀")
+    }
+
+    _gatherDOM() {
+        const $ = (s) => document.querySelector(s)
+        const $$ = (s) => Array.from(document.querySelectorAll(s))
+        return {
+            sidebar: $(".sidebar.left"), area: $("#gesture-area"), canvas: $("#gesture-canvas"),
+            hud: $("#gesture-hud"), flow: $("#log-flow"), logWrapper: $("#log-wrapper"),
+            core: { strategy: $("#strategy"), hysteresis: $("#hysteresis"), macro: $("#macro-radius"), tail: $("#tail-radius"), pointers: $$(".cfg-pointer"), buttons: $$(".cfg-button") },
+            actCfg: { toggle: $("#toggle-action"), cooldown: $("#cfg-cooldown"), btn: $("#new-act-btn"), path: $("#new-act-path"), name: $("#new-act-name"), addBtn: $("#add-act-btn"), list: $("#action-list") },
+            timeout: { toggle: $("#toggle-timeout"), start: $("#start-timeout"), idle: $("#idle-timeout") },
+            sensory: { toggle: $("#toggle-sensory"), audio: $("#cfg-audio"), vibrate: $("#cfg-vibrate") },
+            vis: { toggle: $("#toggle-visualizer"), width: $("#line-width"), dist: $("#vis-dist"), points: $("#vis-points"), cleanup: $("#vis-cleanup") },
+            hudCfg: { toggle: $("#toggle-hud"), cleanup: $("#hud-cleanup") },
+            suppress: { toggle: $("#toggle-suppressor"), key: $("#suppress") },
+            btn: { pause: $("#pause-btn"), destroy: $("#destroy-btn") },
+            labels: { hysteresis: $("#val-hysteresis"), macro: $("#val-macro"), tail: $("#val-tail"), cooldown: $("#val-cooldown"), start: $("#val-start"), idle: $("#val-idle"), linewidth: $("#val-linewidth"), visDist: $("#val-vis-dist"), visPoints: $("#val-vis-points"), visCleanup: $("#val-vis-cleanup"), hudCleanup: $("#val-hud-cleanup") }
+        }
+    }
+
+    _setupEngine() {
+        this.engine = new GestureEngine({
+            targetElement: this.dom.area,
+            strategy: new StrategyAdaptiveHysteresis({ macroRadius: 35, tailRadius: 15, hysteresis: 10 }),
+            triggerButtons: [1, 2, 3, 4],
+            allowedPointerTypes: ["mouse", "pen", "touch"]
+        })
+        this.engine.use({
+            id: "appEventCatcher", install: () => {},
+            onSuppressed: () => {
+                this.log("info", "拦截器触发，放行原生事件", "🛡️")
+                const s = this.engine.getPlugin("sensory")
+                if (s) { s._playTone(400, "square", 0.1, 0.05); s._vibrate(10) }
+            },
+            onPaused: () => this.log("warn", "引擎实例已被挂起", "⏸️"),
+            onResumed: () => this.log("info", "引擎实例已恢复监听", "▶️"),
+            onAbort: ({ reason }) => {
+                const reasons = { startTimeout: "起始判定超时", idleTimeout: "静止停留超时", systemCancel: "系统原生中断", paused: "强制挂起" }
+                this.log("error", `手势中断: ${reasons[reason] || reason}`, "🛑")
+            }
+        })
+    }
+
+    _setupPlugins() {
+        const colorResolver = (seq, btnId) => this.btnColors[btnId] || "#7dcfff"
+        this.plugins = {
+            timeout: new PluginTimeout({ startTimeout: 1000, idleTimeout: 2000 }),
+            suppressor: new PluginSuppressor({ suppressorFn: (ev) => ev.altKey === true }),
+            visualizer: new PluginVisualizer(this.dom.canvas, { lineWidth: 6, colorFormatter: colorResolver }),
+            hud: new PluginHUD(this.dom.hud, { colorFormatter: colorResolver, textFormatter: (seq, btnId) => `[${this.btnNames[btnId] || `Btn${btnId}`}] ${seq.join("")}` }),
+            sensory: new PluginSensory({ enableAudio: true, enableHaptic: true }),
+            actionManager: new PluginActionManager({
+                globalCooldown: 0,
+                onAfterAction: ({ payload, action }) => {
+                    const btn = this.btnNames[payload.triggerButton] || `Btn${payload.triggerButton}`
+                    this.engine.getPlugin("sensory")?.playSuccess(payload.paths)
+                    this.log("success", `识别通过: ${btn} <b>${payload.gestureCode}</b>`, "✅")
+                    this.log("action", `执行动作: [${action.name}]`, action.icon || "⚡")
+                },
+                onMissed: ({ payload }) => {
+                    if (!payload.gestureCode) {
+                        if (this.engine.getHasMoved()) this.log("warn", "无效滑动：位移未达到宏观半径", "⚠️")
+                        return
+                    }
+                    this.engine.getPlugin("sensory")?.playError(payload.paths)
+                    this.log("warn", `未知手势: ${payload.gestureCode} (未绑定动作)`, "❓")
+                },
+                onCooldown: ({ action }, remain) => this.log("warn", `动作 [${action.name}] 冷却中 (${remain}ms)`, "⏳")
+            })
+        }
+        this.plugins.actionManager
+            .register({ name: "关闭标签页", icon: "❌", button: "right", path: "↓→", cooldown: 500, execute: () => null })
+            .register({ name: "刷新页面", icon: "🔄", button: "middle", path: "↓", execute: () => null })
+            .register({ name: "返回文档顶部", icon: "🚀", button: "x1", path: "↑", execute: () => null })
+            .register({ name: "全局切换上一页", icon: "👈", path: "←", execute: () => null })
+            .register({ name: "全局切换下一页", icon: "👉", path: "→", execute: () => null })
+        Object.values(this.plugins).forEach(p => this.engine.use(p))
+    }
+
+    _updateCoreConfig() {
+        if (!this.engine) return
+        const c = this.dom.core
+        const [h, m, t] = [c.hysteresis.value, c.macro.value, c.tail.value].map(Number)
+        this.dom.labels.hysteresis.textContent = `${h}°`
+        this.dom.labels.macro.textContent = `${m}px`
+        this.dom.labels.tail.textContent = `${t}px`
+        const strategies = { fourWay: h > 0 ? Strategy4WayHysteresis : Strategy4Way, eightWay: h > 0 ? Strategy8WayHysteresis : Strategy8Way, adaptive: h > 0 ? StrategyAdaptiveHysteresis : StrategyAdaptive }
+        const StratClass = strategies[c.strategy.value] || StrategyAdaptive
+        this.engine.setStrategy(new StratClass({ macroRadius: m, tailRadius: t, hysteresis: h }))
+        this.engine.updateConfig({ allowedPointerTypes: c.pointers.filter(el => el.checked).map(el => el.value), triggerButtons: c.buttons.filter(el => el.checked).map(el => Number(el.value)) })
+    }
+
+    _updatePluginConfig() {
+        if (!this.engine) return
+        const toggle = (checkbox, id, plugin) => {
+            const active = this.engine.getPlugin(id)
+            if (checkbox.checked && !active) this.engine.use(plugin)
+            else if (!checkbox.checked && active) this.engine.unuse(id)
+        }
+        toggle(this.dom.actCfg.toggle, "actionManager", this.plugins.actionManager)
+        const cd = Number(this.dom.actCfg.cooldown.value)
+        this.dom.labels.cooldown.textContent = `${cd}ms`
+        if(this.plugins.actionManager) this.plugins.actionManager.options.globalCooldown = cd
+
+        toggle(this.dom.timeout.toggle, "timeout", this.plugins.timeout)
+        const [st, it] = [this.dom.timeout.start.value, this.dom.timeout.idle.value].map(Number)
+        this.dom.labels.start.textContent = `${st}ms`
+        this.dom.labels.idle.textContent = `${it}ms`
+        this.plugins.timeout.updateConfig({ startTimeout: st, idleTimeout: it })
+
+        toggle(this.dom.sensory.toggle, "sensory", this.plugins.sensory)
+        this.plugins.sensory.updateConfig({ enableAudio: this.dom.sensory.audio.checked, enableHaptic: this.dom.sensory.vibrate.checked })
+
+        toggle(this.dom.vis.toggle, "visualizer", this.plugins.visualizer)
+        const [lw, dist, pts, cln] = [this.dom.vis.width.value, this.dom.vis.dist.value, this.dom.vis.points.value, this.dom.vis.cleanup.value].map(Number)
+        this.dom.labels.linewidth.textContent = `${lw}px`
+        this.dom.labels.visDist.textContent = `${dist}px`
+        this.dom.labels.visPoints.textContent = pts
+        this.dom.labels.visCleanup.textContent = `${cln}ms`
+        this.plugins.visualizer.updateConfig({ lineWidth: lw, minDrawDistance: dist, maxPoints: pts, cleanupDelay: cln })
+
+        toggle(this.dom.hudCfg.toggle, "hud", this.plugins.hud)
+        const hudCln = Number(this.dom.hudCfg.cleanup.value)
+        this.dom.labels.hudCleanup.textContent = `${hudCln}ms`
+        this.plugins.hud.updateConfig({ cleanupDelay: hudCln })
+
+        toggle(this.dom.suppress.toggle, "suppressor", this.plugins.suppressor)
+        const key = this.dom.suppress.key.value
+        this.plugins.suppressor.updateConfig({ suppressorFn: (ev) => ev[`${key}Key`] === true })
+    }
+
+    _renderActions() {
+        this.dom.actCfg.list.innerHTML = ""
+        for (const [key, action] of this.plugins.actionManager.actionRegistry.entries()) {
+            const div = document.createElement("div")
+            div.className = "action-item"
+            div.innerHTML = `<span>${action.name} <span class="kbd">${action.path}</span></span><button class="del-btn" data-key="${key}">移除</button>`
+            this.dom.actCfg.list.appendChild(div)
+        }
+    }
+
+    _bindEvents() {
+        const handler = (e) => {
+            if (e.target.closest('.core-group')) this._updateCoreConfig()
+            else if (e.target.closest('.plugin-group')) this._updatePluginConfig()
+        }
+        this.dom.sidebar.addEventListener('input', handler)
+        this.dom.sidebar.addEventListener('change', handler)
+        
+        this.dom.actCfg.addBtn.addEventListener("click", () => {
+            const btnVal = this.dom.actCfg.btn.value
+            const pathVal = this.dom.actCfg.path.value.trim().toUpperCase()
+            const nameVal = this.dom.actCfg.name.value.trim()
+            if(pathVal && nameVal) {
+                this.plugins.actionManager.register({ name: nameVal, icon: "⚡", button: btnVal === 'any' ? null : btnVal, path: pathVal, execute: () => null })
+                this._renderActions()
+                this.dom.actCfg.path.value = ""
+                this.dom.actCfg.name.value = ""
+            }
+        })
+
+        this.dom.actCfg.list.addEventListener("click", (e) => {
+            if(e.target.classList.contains("del-btn")) {
+                const key = e.target.getAttribute("data-key")
+                const item = this.plugins.actionManager.actionRegistry.get(key)
+                if(item) {
+                    this.plugins.actionManager.unregister(item)
+                    this._renderActions()
+                }
+            }
+        })
+
+        const { pause, destroy } = this.dom.btn
+        pause.addEventListener("click", () => {
+            if (!this.engine) return
+            const paused = this.engine.isPaused
+            paused ? this.engine.resume() : this.engine.pause()
+            pause.innerHTML = paused ? "⏸️ 暂停引擎" : "▶️ 恢复引擎"
+            pause.style.background = paused ? "#e0af68" : "#9ece6a"
+        })
+
+        destroy.addEventListener("click", () => {
+            if (!this.engine) return
+            this.engine.destroy()
+            this.engine = null
+            this.log("error", "引擎实例生命周期终结，内存池已释放", "💥")
+            pause.disabled = destroy.disabled = true
+            pause.style.filter = destroy.style.filter = "grayscale(1)"
+            destroy.innerHTML = "已销毁"
+        })
+    }
+
+    log(type, msg, icon = "ℹ️") {
+        const time = new Date().toLocaleTimeString().split(" ")[0]
+        const html = `<div class="log-item ${type}"><div class="log-item-header"><span>${icon} SYSTEM</span><span>${time}</span></div><div class="log-item-content">${msg}</div></div>`
+        this.dom.flow.insertAdjacentHTML("beforeend", html)
+        this.dom.logWrapper.scrollTop = this.dom.logWrapper.scrollHeight
+    }
+}
+
+document.addEventListener("DOMContentLoaded", () => new DemoApplication())
+</script>
+</body>
+</html>
